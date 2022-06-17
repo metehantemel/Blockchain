@@ -1,9 +1,6 @@
 package main
 
 import (
-	"bytes"
-	"crypto/sha256"
-	"strconv"
 	"time"
 )
 
@@ -12,27 +9,23 @@ type Block struct {
 	Data              []byte
 	PreviousBlockHash []byte
 	Hash              []byte
+	Nonce             int
 }
 
-func (_block *Block) SetHash() {
-	timestamp := []byte(strconv.FormatInt(_block.Timestamp, 10))
-	headers := bytes.Join(
-		[][]byte{_block.PreviousBlockHash, _block.Data, timestamp},
-		[]byte{},
-	)
-	hash := sha256.Sum256(headers)
-
-	_block.Hash = hash[:]
-}
-
-func NewBlock(data string, previousBlockHash []byte) *Block {
-	block := &Block{
+func NewBlock(_data string, _previousBlockHash []byte) *Block {
+	_block := &Block{
 		time.Now().Unix(),
-		[]byte(data),
-		previousBlockHash,
-		[]byte{}}
+		[]byte(_data),
+		_previousBlockHash,
+		[]byte{},
+		0,
+	}
 
-	block.SetHash()
+	_proofOfWork := NewProofOfWork(_block)
+	_nonce, _hash := _proofOfWork.Run()
 
-	return block
+	_block.Hash = _hash[:]
+	_block.Nonce = _nonce
+
+	return _block
 }

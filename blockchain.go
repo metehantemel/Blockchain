@@ -4,9 +4,9 @@ type Blockchain struct {
 	blocks []*Block
 }
 
-func (_blockchain *Blockchain) AddBlock(data string) {
-	previousBlock := _blockchain.blocks[len(_blockchain.blocks)-1]
-	newBlock := NewBlock(data, previousBlock.Hash)
+func (_blockchain *Blockchain) AddBlock(_data string) {
+	_previousBlock := _blockchain.blocks[len(_blockchain.blocks)-1]
+	newBlock := NewBlock(_data, _previousBlock.Hash)
 	_blockchain.blocks = append(_blockchain.blocks, newBlock)
 }
 
