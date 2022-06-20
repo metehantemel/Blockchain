@@ -1,4 +1,4 @@
-package main
+package blockchain
 
 import (
 	"bytes"
@@ -65,7 +65,6 @@ func (_proofOfWork *ProofOfWork) Run() (int, []byte) {
 		}
 	}
 	fmt.Print("\n\n")
-
 	return _nonce, _hash[:]
 }
 

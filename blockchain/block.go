@@ -1,15 +1,15 @@
-package main
+package blockchain
 
 import (
 	"time"
 )
 
 type Block struct {
-	Timestamp         int64
-	Data              []byte
-	PreviousBlockHash []byte
-	Hash              []byte
-	Nonce             int
+	Timestamp         int64  `bson:"timestamp"`
+	Data              []byte `bson:"data"`
+	PreviousBlockHash []byte `bson:"previous_hash"`
+	Hash              []byte `bson:"hash"`
+	Nonce             int    `bson:"nonce"`
 }
 
 func NewBlock(_data string, _previousBlockHash []byte) *Block {

@@ -1,0 +1,30 @@
+db.createCollection("blocks", {
+   validator: {
+      $jsonSchema: {
+         bsonType: "object",
+         required: [ "previous_hash", "nonce", "data", "hash", "timestamp" ],
+         properties: {
+            hash: {
+               bsonType: "binData",
+               description: ""
+            },
+            nonce: {
+               bsonType: "int",
+               description: ""
+            },
+            timestamp: {
+               bsonType: "long",
+               description: ""
+            },
+            previous_hash: {
+               bsonType: "binData",
+               description: ""
+            },
+            data: {
+               bsonType: "binData",
+               description: ""
+            },
+         }
+      }
+   }
+})
