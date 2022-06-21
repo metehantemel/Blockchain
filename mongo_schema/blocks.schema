@@ -2,7 +2,7 @@ db.createCollection("blocks", {
    validator: {
       $jsonSchema: {
          bsonType: "object",
-         required: [ "previous_hash", "nonce", "data", "hash", "timestamp" ],
+         required: ["previous_hash", "nonce", "transactions", "hash", "timestamp"],
          properties: {
             hash: {
                bsonType: "binData",
@@ -20,9 +20,44 @@ db.createCollection("blocks", {
                bsonType: "binData",
                description: ""
             },
-            data: {
-               bsonType: "binData",
-               description: ""
+            transactions: {
+               type: "array",
+               properties: {
+                  t_id: {
+                     bsonType: "binData",
+                     description: ""
+                  },
+                  transaction_output: {
+                     type: "object",
+                     properties: {
+                        to_value: {
+                           bsonType: "int",
+                           description: ""
+                        },
+                        script_pub_key: {
+                           bsonType: "string",
+                           description: ""
+                        }
+                     }
+                  },
+                  transaction_input: {
+                     type: "object",
+                     properties: {
+                        ti_id: {
+                           bsonType: "binData",
+                           description: ""
+                        },
+                        vout: {
+                           bsonType: "int",
+                           description: ""
+                        },
+                        script_sig: {
+                           bsonType: "string",
+                           description: ""
+                        }
+                     }
+                  }
+               }
             },
          }
       }

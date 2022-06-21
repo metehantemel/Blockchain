@@ -33,7 +33,7 @@ func (_proofOfWork *ProofOfWork) prepareData(_nonce int) []byte {
 	_data := bytes.Join(
 		[][]byte{
 			_proofOfWork.block.PreviousBlockHash,
-			_proofOfWork.block.Data,
+			_proofOfWork.block.HashTransactions(),
 			IntToHex(_proofOfWork.block.Timestamp),
 			IntToHex(int64(difficulty)),
 			IntToHex(int64(_nonce)),
@@ -50,7 +50,7 @@ func (_proofOfWork *ProofOfWork) Run() (int, []byte) {
 	_maxNonce := math.MaxInt64
 	_nonce := 0
 
-	fmt.Printf("Mining block \"%s\"\n", _proofOfWork.block.Data)
+	fmt.Printf("Mining block \"%x\"\n", _proofOfWork.block.HashTransactions())
 
 	for _nonce < _maxNonce {
 		_data := _proofOfWork.prepareData(_nonce)
