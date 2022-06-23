@@ -1,65 +1,63 @@
-db.createCollection("blocks", {
-   validator: {
-      $jsonSchema: {
-         bsonType: "object",
-         required: ["previous_hash", "nonce", "transactions", "hash", "timestamp"],
-         properties: {
-            hash: {
-               bsonType: "binData",
-               description: ""
-            },
-            nonce: {
-               bsonType: "int",
-               description: ""
-            },
-            timestamp: {
-               bsonType: "long",
-               description: ""
-            },
-            previous_hash: {
-               bsonType: "binData",
-               description: ""
-            },
-            transactions: {
-               type: "array",
-               properties: {
-                  t_id: {
-                     bsonType: "binData",
-                     description: ""
-                  },
-                  transaction_output: {
-                     type: "object",
-                     properties: {
-                        to_value: {
-                           bsonType: "int",
-                           description: ""
-                        },
-                        script_pub_key: {
-                           bsonType: "string",
-                           description: ""
-                        }
-                     }
-                  },
-                  transaction_input: {
-                     type: "object",
-                     properties: {
-                        ti_id: {
-                           bsonType: "binData",
-                           description: ""
-                        },
-                        vout: {
-                           bsonType: "int",
-                           description: ""
-                        },
-                        script_sig: {
-                           bsonType: "string",
-                           description: ""
-                        }
-                     }
-                  }
+bsonType: "object",
+required: ["previous_hash", "nonce", "transactions", "hash", "timestamp"],
+properties: {
+   hash: {
+      bsonType: "binData",
+      description: ""
+   },
+   nonce: {
+      bsonType: "int",
+      description: ""
+   },
+   timestamp: {
+      bsonType: "long",
+      description: ""
+   },
+   previous_hash: {
+      bsonType: "binData",
+      description: ""
+   },
+   transactions: {
+      type: "array",
+      properties: {
+         t_id: {
+            bsonType: "binData",
+            description: ""
+         },
+         transaction_output: {
+            type: "array",
+            properties: {
+               to_value: {
+                  bsonType: "int",
+                  description: ""
+               },
+               public_key_hash: {
+                  bsonType: "binData",
+                  description: ""
                }
-            },
+            }
+         },
+         transaction_input: {
+            type: "array",
+            properties: {
+               ti_id: {
+                  bsonType: "binData",
+                  description: ""
+               },
+               vout: {
+                  bsonType: "int",
+                  description: ""
+               },
+               signature: {
+                  bsonType: "binData",
+                  description: ""
+               },
+               public_key: {
+                  bsonType: "binData",
+                  description: ""
+               }
+            }
          }
       }
-   }
-})
+   },
+}
