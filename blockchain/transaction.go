@@ -2,11 +2,16 @@ package blockchain
 
 import (
 	"bytes"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/gob"
 	"encoding/hex"
 	"fmt"
 	"log"
+	"math/big"
+	"strings"
 )
 
 const subsidy = 10
@@ -17,17 +22,6 @@ type Transaction struct {
 	Vout []TransactionOutput `bson:"transaction_output"`
 }
 
-type TransactionOutput struct {
-	Value        int    `bson:"to_value"`
-	ScriptPubKey string `bson:"script_pub_key"`
-}
-
-type TransactionInput struct {
-	TransactionID []byte `bson:"ti_id"`
-	Vout          int    `bson:"vout"`
-	ScriptSig     string `bson:"script_sig"`
-}
-
 func NewCoinbaseTransaction(_to, _data string) *Transaction {
 	if _data == "" {
 		_data = fmt.Sprintf("Reward to '%s'", _to)
@@ -36,18 +30,16 @@ func NewCoinbaseTransaction(_to, _data string) *Transaction {
 	_transactionInput := TransactionInput{
 		[]byte{},
 		-1,
-		_data,
+		nil,
+		[]byte(_data),
 	}
-	_transactionOutput := TransactionOutput{
-		subsidy,
-		_to,
-	}
+	_transactionOutput := NewTransactionOutput(subsidy, _to)
 	_transaction := Transaction{
 		nil,
 		[]TransactionInput{_transactionInput},
-		[]TransactionOutput{_transactionOutput},
+		[]TransactionOutput{*_transactionOutput},
 	}
-	_transaction.SetID()
+	_transaction.ID = _transaction.Hash()
 
 	return &_transaction
 }
@@ -56,7 +48,13 @@ func NewUTXOTransaction(_from, _to string, _amount int, _blockchain *Blockchain)
 	var _inputs []TransactionInput
 	var _outputs []TransactionOutput
 
-	_account, _validOutputs := _blockchain.FindSpendableOutputs(_from, _amount)
+	_wallets, _error := NewWallets()
+	if _error != nil {
+		panic(_error)
+	}
+	_wallet := _wallets.GetWallet(_from)
+	_publicKeyHash := HashPublicKey(_wallet.PublicKey)
+	_account, _validOutputs := _blockchain.FindSpendableOutputs(_publicKeyHash, _amount)
 
 	if _account < _amount {
 		log.Panic("ERROR: Not enough funds")
@@ -69,48 +67,48 @@ func NewUTXOTransaction(_from, _to string, _amount int, _blockchain *Blockchain)
 		}
 
 		for _, _out := range _outs {
-			_input := TransactionInput{_transactionID, _out, _from}
+			_input := TransactionInput{_transactionID, _out, nil, _wallet.PublicKey}
 			_inputs = append(_inputs, _input)
 		}
 	}
 
-	_outputs = append(_outputs, TransactionOutput{_amount, _to})
+	_outputs = append(_outputs, *NewTransactionOutput(_amount, _to))
 	if _account > _amount {
-		_outputs = append(_outputs, TransactionOutput{_account - _amount, _from})
+		_outputs = append(_outputs, *NewTransactionOutput(_account-_amount, _from))
 	}
 
 	_transaction := Transaction{nil, _inputs, _outputs}
-	_transaction.SetID()
+	_transaction.ID = _transaction.Hash()
+	_blockchain.SignTransaction(&_transaction, _wallet.PrivateKey)
 
 	return &_transaction
 }
 
-func (_blockchain *Blockchain) FindSpendableOutputs(_address string, _amount int) (int, map[string][]int) {
-	_unspentOutputs := make(map[string][]int)
-	_unspentTransactions := _blockchain.FindUnspentTransactions(_address)
-	_accumulated := 0
-
-Work:
-	for _, _transaction := range _unspentTransactions {
-		_transactionID := hex.EncodeToString(_transaction.ID)
-
-		for _outputID, _output := range _transaction.Vout {
-			if _output.CanBeUnlockedWith(_address) && _accumulated < _amount {
-				_accumulated += _output.Value
-				_unspentOutputs[_transactionID] = append(_unspentOutputs[_transactionID], _outputID)
-
-				if _accumulated >= _amount {
-					break Work
-				}
-			}
-		}
-	}
-
-	return _accumulated, _unspentOutputs
-}
-
 func (_transaction *Transaction) IsCoinbase() bool {
 	return len(_transaction.Vin) == 1 && len(_transaction.Vin[0].TransactionID) == 0 && _transaction.Vin[0].Vout == -1
+}
+
+func (_transaction Transaction) Serialize() []byte {
+	var _encoded bytes.Buffer
+
+	_encoder := gob.NewEncoder(&_encoded)
+	_error := _encoder.Encode(_transaction)
+	if _error != nil {
+		log.Panic(_error)
+	}
+
+	return _encoded.Bytes()
+}
+
+func (_transaction *Transaction) Hash() []byte {
+	var _hash [32]byte
+
+	_transactionCopy := *_transaction
+	_transactionCopy.ID = []byte{}
+
+	_hash = sha256.Sum256(_transactionCopy.Serialize())
+
+	return _hash[:]
 }
 
 func (_transaction *Transaction) SetID() {
@@ -126,10 +124,113 @@ func (_transaction *Transaction) SetID() {
 	_transaction.ID = _hash[:]
 }
 
-func (_transactionInput *TransactionInput) CanUnlockOutputWith(_unlockingData string) bool {
-	return _transactionInput.ScriptSig == _unlockingData
+func (_transaction *Transaction) TrimmedCopy() Transaction {
+	var _inputs []TransactionInput
+	var _outputs []TransactionOutput
+
+	for _, _vin := range _transaction.Vin {
+		_inputs = append(
+			_inputs,
+			TransactionInput{
+				_vin.TransactionID,
+				_vin.Vout,
+				nil,
+				nil},
+		)
+	}
+
+	for _, _vout := range _transaction.Vout {
+		_outputs = append(
+			_outputs,
+			TransactionOutput{
+				_vout.Value,
+				_vout.PublicKeyHash},
+		)
+	}
+
+	_transactionCopy := Transaction{
+		_transaction.ID,
+		_inputs,
+		_outputs}
+
+	return _transactionCopy
 }
 
-func (_transactionOutput *TransactionOutput) CanBeUnlockedWith(_unlockingData string) bool {
-	return _transactionOutput.ScriptPubKey == _unlockingData
+func (_transaction *Transaction) Sign(_privateKey ecdsa.PrivateKey, _previousTransactions map[string]Transaction) {
+	if _transaction.IsCoinbase() {
+		return
+	}
+
+	_transactionCopy := _transaction.TrimmedCopy()
+
+	for _inputID, _vin := range _transactionCopy.Vin {
+		_previousTransaction := _previousTransactions[hex.EncodeToString(_vin.TransactionID)]
+		_transactionCopy.Vin[_inputID].Signature = nil
+		_transactionCopy.Vin[_inputID].PublicKey = _previousTransaction.Vout[_vin.Vout].PublicKeyHash
+		_transactionCopy.ID = _transactionCopy.Hash()
+		_transactionCopy.Vin[_inputID].PublicKey = nil
+
+		_r, _s, _error := ecdsa.Sign(rand.Reader, &_privateKey, _transactionCopy.ID)
+		if _error != nil {
+			panic(_error)
+		}
+		_signature := append(_r.Bytes(), _s.Bytes()...)
+
+		_transaction.Vin[_inputID].Signature = _signature
+	}
+}
+
+func (_transaction *Transaction) Verify(_previousTransactions map[string]Transaction) bool {
+	_transactionCopy := _transaction.TrimmedCopy()
+	_curve := elliptic.P256()
+
+	for _inputID, _vin := range _transaction.Vin {
+		_previousTransaction := _previousTransactions[hex.EncodeToString(_vin.TransactionID)]
+		_transactionCopy.Vin[_inputID].Signature = nil
+		_transactionCopy.Vin[_inputID].PublicKey = _previousTransaction.Vout[_vin.Vout].PublicKeyHash
+		_transactionCopy.ID = _transactionCopy.Hash()
+		_transactionCopy.Vin[_inputID].PublicKey = nil
+
+		_r := big.Int{}
+		_s := big.Int{}
+		_signatureLen := len(_vin.Signature)
+		_r.SetBytes(_vin.Signature[:(_signatureLen / 2)])
+		_s.SetBytes(_vin.Signature[(_signatureLen / 2):])
+
+		_x := big.Int{}
+		_y := big.Int{}
+		_keyLen := len(_vin.PublicKey)
+		_x.SetBytes(_vin.PublicKey[:(_keyLen / 2)])
+		_y.SetBytes(_vin.PublicKey[(_keyLen / 2):])
+
+		_rawPublicKey := ecdsa.PublicKey{_curve, &_x, &_y}
+		if ecdsa.Verify(&_rawPublicKey, _transactionCopy.ID, &_r, &_s) == false {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (_transaction Transaction) String() string {
+	var _lines []string
+
+	_lines = append(_lines, fmt.Sprintf("--- Transaction %x:", _transaction.ID))
+
+	for i, _input := range _transaction.Vin {
+
+		_lines = append(_lines, fmt.Sprintf("     Input %d:", i))
+		_lines = append(_lines, fmt.Sprintf("       TXID:      %x", _input.TransactionID))
+		_lines = append(_lines, fmt.Sprintf("       Out:       %d", _input.Vout))
+		_lines = append(_lines, fmt.Sprintf("       Signature: %x", _input.Signature))
+		_lines = append(_lines, fmt.Sprintf("       PubKey:    %x", _input.PublicKey))
+	}
+
+	for _i, _output := range _transaction.Vout {
+		_lines = append(_lines, fmt.Sprintf("     Output %d:", _i))
+		_lines = append(_lines, fmt.Sprintf("       Value:  %d", _output.Value))
+		_lines = append(_lines, fmt.Sprintf("       Script: %x", _output.PublicKeyHash))
+	}
+
+	return strings.Join(_lines, "\n")
 }

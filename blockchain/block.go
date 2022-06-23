@@ -32,6 +32,10 @@ func NewBlock(_transactions []*Transaction, _previousBlockHash []byte) *Block {
 	return _block
 }
 
+func NewGenesisBlock(_coinbase *Transaction) *Block {
+	return NewBlock([]*Transaction{_coinbase}, []byte{})
+}
+
 func (_block *Block) HashTransactions() []byte {
 	var _transactionHashes [][]byte
 	var _transactionHash [32]byte
