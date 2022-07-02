@@ -58,7 +58,7 @@ func (_proofOfWork *ProofOfWork) Run() (int, []byte) {
 		_hashInt.SetBytes(_hash[:])
 
 		if _hashInt.Cmp(_proofOfWork.difficulty) == -1 {
-			fmt.Printf("\rSolved: %x", _hash)
+			fmt.Printf("\rSolved: %x\n", _hash)
 			break
 		} else {
 			_nonce++

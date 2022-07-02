@@ -24,7 +24,13 @@ type Transaction struct {
 
 func NewCoinbaseTransaction(_to, _data string) *Transaction {
 	if _data == "" {
-		_data = fmt.Sprintf("Reward to '%s'", _to)
+		_randData := make([]byte, 20)
+		_, _error := rand.Read(_randData)
+		if _error != nil {
+			log.Panic(_error)
+		}
+		_data = fmt.Sprintf("%x", _randData)
+		fmt.Printf("DATA : %s\r\n", _data)
 	}
 
 	_transactionInput := TransactionInput{
@@ -44,7 +50,7 @@ func NewCoinbaseTransaction(_to, _data string) *Transaction {
 	return &_transaction
 }
 
-func NewUTXOTransaction(_from, _to string, _amount int, _blockchain *Blockchain) *Transaction {
+func NewUTXOTransaction(_from, _to string, _amount int, _UTXOSet *UTXOSet) *Transaction {
 	var _inputs []TransactionInput
 	var _outputs []TransactionOutput
 
@@ -54,7 +60,7 @@ func NewUTXOTransaction(_from, _to string, _amount int, _blockchain *Blockchain)
 	}
 	_wallet := _wallets.GetWallet(_from)
 	_publicKeyHash := HashPublicKey(_wallet.PublicKey)
-	_account, _validOutputs := _blockchain.FindSpendableOutputs(_publicKeyHash, _amount)
+	_account, _validOutputs := _UTXOSet.FindSpendableOutputs(_publicKeyHash, _amount)
 
 	if _account < _amount {
 		log.Panic("ERROR: Not enough funds")
@@ -79,7 +85,7 @@ func NewUTXOTransaction(_from, _to string, _amount int, _blockchain *Blockchain)
 
 	_transaction := Transaction{nil, _inputs, _outputs}
 	_transaction.ID = _transaction.Hash()
-	_blockchain.SignTransaction(&_transaction, _wallet.PrivateKey)
+	_UTXOSet.Blockchain.SignTransaction(&_transaction, _wallet.PrivateKey)
 
 	return &_transaction
 }

@@ -16,24 +16,31 @@ type Blockchain struct {
 func NewBlockChain(_address string) *Blockchain {
 	_db := Create_DB()
 	var _lastBlockHash []byte
-
+	var _blockchain Blockchain
 	if _db.GetBlockCount() == 0 {
 		_coinbaseTransaction := NewCoinbaseTransaction(_address, "genesisCoinbaseData")
 		_genesisBlock := NewGenesisBlock(_coinbaseTransaction)
 		_lastBlockHash = _genesisBlock.Hash
 		_db.AddBlock(_genesisBlock)
+		_blockchain = Blockchain{
+			_lastBlockHash,
+			_db,
+		}
+		_UTXOSet := UTXOSet{&_blockchain}
+		_UTXOSet.ReIndex()
 	} else {
 		_lastBlock := _db.GetLastBlock()
 		_lastBlockHash = _lastBlock.Hash
+		_blockchain = Blockchain{
+			_lastBlockHash,
+			_db,
+		}
 	}
 
-	return &Blockchain{
-		_lastBlockHash,
-		_db,
-	}
+	return &_blockchain
 }
 
-func (_blockchain *Blockchain) MineBlock(_transactions []*Transaction) {
+func (_blockchain *Blockchain) MineBlock(_transactions []*Transaction) *Block {
 	_previousBlock := _blockchain.DB.GetLastBlock()
 
 	for _, _transaction := range _transactions {
@@ -44,85 +51,49 @@ func (_blockchain *Blockchain) MineBlock(_transactions []*Transaction) {
 
 	newBlock := NewBlock(_transactions, _previousBlock.Hash)
 	_blockchain.DB.AddBlock(newBlock)
+	return newBlock
 }
 
-func (_blockchain *Blockchain) FindSpendableOutputs(_publicKeyHash []byte, _amount int) (int, map[string][]int) {
-	_unspentOutputs := make(map[string][]int)
-	_unspentTransactions := _blockchain.FindUnspentTransactions(_publicKeyHash)
-	_accumulated := 0
-
-Work:
-	for _, _transaction := range _unspentTransactions {
-		_transactionID := hex.EncodeToString(_transaction.ID)
-
-		for _outputID, _output := range _transaction.Vout {
-			if _output.IsLockedWithKey(_publicKeyHash) && _accumulated < _amount {
-				_accumulated += _output.Value
-				_unspentOutputs[_transactionID] = append(_unspentOutputs[_transactionID], _outputID)
-
-				if _accumulated >= _amount {
-					break Work
-				}
-			}
-		}
-	}
-
-	return _accumulated, _unspentOutputs
-}
-
-func (_blockchain *Blockchain) FindUnspentTransactions(_publicKeyHash []byte) []Transaction {
-	var _unspentTransactions []Transaction
-	_spentTransactionOutputs := make(map[string][]int)
-	_blockchainIterator := _blockchain.Iterator()
+func (_blockchain *Blockchain) FindUTXOs() []UTXO {
+	_UTXOs := []UTXO{}
+	_spentTransactionOuts := make(map[string][]int)
+	_iterator := _blockchain.Iterator()
 
 	for {
-		_block := _blockchainIterator.Next()
+		_block := _iterator.Next()
+		for _, _transaction := range _block.Transactions {
+			_transactionID := hex.EncodeToString(_transaction.ID)
 
-		for _, _transcation := range _block.Transactions {
-			_transcationID := hex.EncodeToString(_transcation.ID)
+			_UTXOc := UTXO{[]byte{}, []TransactionOutput{}}
+			_UTXOs = append(_UTXOs, _UTXOc)
+			_UTXO := &_UTXOs[len(_UTXOs)-1]
+			_UTXO.TransactionID = _transaction.ID
 
 		Outputs:
-			for _outputID, _output := range _transcation.Vout {
-				if _spentTransactionOutputs != nil {
-					for _, _spentOutputID := range _spentTransactionOutputs[_transcationID] {
-						if _spentOutputID == _outputID {
+			for _outId, _out := range _transaction.Vout {
+				if _spentTransactionOuts[_transactionID] != nil {
+					for _, _spentTransactionOutId := range _spentTransactionOuts[_transactionID] {
+						if _spentTransactionOutId == _outId {
 							continue Outputs
 						}
 					}
 				}
 
-				if _output.IsLockedWithKey(_publicKeyHash) {
-					_unspentTransactions = append(_unspentTransactions, *_transcation)
+				_UTXO.Outputs = append(_UTXO.Outputs, _out)
+
+			}
+
+			if _transaction.IsCoinbase() == false {
+				for _, _input := range _transaction.Vin {
+					_inputID := hex.EncodeToString(_input.TransactionID)
+					_spentTransactionOuts[_inputID] = append(_spentTransactionOuts[_inputID], _input.Vout)
 				}
 			}
 
-			if _transcation.IsCoinbase() == false {
-				for _, _transactionInput := range _transcation.Vin {
-					if _transactionInput.UsesKey(_publicKeyHash) {
-						_transactionInputID := hex.EncodeToString(_transactionInput.TransactionID)
-						_spentTransactionOutputs[_transactionInputID] = append(_spentTransactionOutputs[_transactionInputID], _transactionInput.Vout)
-					}
-				}
-			}
 		}
 
 		if len(_block.PreviousBlockHash) == 0 {
 			break
-		}
-	}
-
-	return _unspentTransactions
-}
-
-func (_blockchain *Blockchain) FindUTXO(_publicKeyHash []byte) []TransactionOutput {
-	var _UTXOs []TransactionOutput
-	_unspentTransactions := _blockchain.FindUnspentTransactions(_publicKeyHash)
-
-	for _, _transaction := range _unspentTransactions {
-		for _, _output := range _transaction.Vout {
-			if _output.IsLockedWithKey(_publicKeyHash) {
-				_UTXOs = append(_UTXOs, _output)
-			}
 		}
 	}
 
@@ -131,7 +102,6 @@ func (_blockchain *Blockchain) FindUTXO(_publicKeyHash []byte) []TransactionOutp
 
 func (_blockchain *Blockchain) FindTransaction(_ID []byte) (Transaction, error) {
 	_bcIterator := _blockchain.Iterator()
-
 	for {
 		_block := _bcIterator.Next()
 
@@ -164,6 +134,10 @@ func (_blockchain *Blockchain) SignTransaction(_transaction *Transaction, _priva
 }
 
 func (_blockchain *Blockchain) VerifyTransaction(_transaction *Transaction) bool {
+	if _transaction.IsCoinbase() {
+		return true
+	}
+
 	_previousTransactions := make(map[string]Transaction)
 
 	for _, _vin := range _transaction.Vin {

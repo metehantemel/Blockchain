@@ -1,8 +1,6 @@
 package blockchain
 
 import (
-	"bytes"
-	"crypto/sha256"
 	"time"
 )
 
@@ -37,13 +35,12 @@ func NewGenesisBlock(_coinbase *Transaction) *Block {
 }
 
 func (_block *Block) HashTransactions() []byte {
-	var _transactionHashes [][]byte
-	var _transactionHash [32]byte
+	var _transactions [][]byte
 
 	for _, _transaction := range _block.Transactions {
-		_transactionHashes = append(_transactionHashes, _transaction.ID)
+		_transactions = append(_transactions, _transaction.Serialize())
 	}
-	_transactionHash = sha256.Sum256(bytes.Join(_transactionHashes, []byte{}))
+	_merkleTree := NewMerkleTree(_transactions)
 
-	return _transactionHash[:]
+	return _merkleTree.RootNode.Data
 }

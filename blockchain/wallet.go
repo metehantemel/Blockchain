@@ -6,6 +6,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
+	"fmt"
 
 	"golang.org/x/crypto/ripemd160"
 )
@@ -82,11 +83,13 @@ func ValidateAddress(_address string) bool {
 func (_wallet *Wallet) GetBalance() int {
 	_address := string(_wallet.GetAddress())
 	_blockchain := NewBlockChain(_address)
+	_UTXOSet := UTXOSet{_blockchain}
 
 	_balance := 0
 	_publicKeyHash := Base58Decode([]byte(_address))
 	_publicKeyHash = _publicKeyHash[1 : len(_publicKeyHash)-4]
-	_UTXOs := _blockchain.FindUTXO(_publicKeyHash)
+	_UTXOs := _UTXOSet.FindUTXO(_publicKeyHash)
+	fmt.Printf("%d Length UTXOS\r\n", len(_UTXOs))
 
 	for _, _out := range _UTXOs {
 		_balance += _out.Value

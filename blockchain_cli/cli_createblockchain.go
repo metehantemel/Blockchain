@@ -13,5 +13,9 @@ func (_cli *CLI) createBlockchain(_address string) {
 
 	_blockchain := blockchain.NewBlockChain(_address)
 	_ = _blockchain
+
+	_UTXOSet := blockchain.UTXOSet{_blockchain}
+	_UTXOSet.ReIndex()
+
 	fmt.Println("Done!")
 }

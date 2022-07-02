@@ -1,0 +1,21 @@
+bsonType: "object",
+required: ["t_id"],
+properties: {
+         t_id: {
+            bsonType: "binData",
+            description: ""
+         },
+         transaction_outputs: {
+            type: "array",
+            properties: {
+               to_value: {
+                  bsonType: "int",
+                  description: ""
+               },
+               public_key_hash: {
+                  bsonType: "binData",
+                  description: ""
+               }
+            }
+         }
+      }
